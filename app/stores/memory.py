@@ -71,6 +71,10 @@ class InstanceStore:
                 raise NotFoundError(f"Workflow {workflow_id} not found")
             return self._data[workflow_id]
 
+    def list_all(self) -> List[WorkflowInstance]:
+        with self._lock:
+            return list(self._data.values())
+
     def lock(self) -> threading.RLock:
         return self._lock
 
@@ -130,6 +134,10 @@ class TaskStore:
         terminal = {TaskStatus.COMPLETED, TaskStatus.CANCELLED}
         with self._lock:
             return [t for t in self._data.values() if t.status not in terminal]
+
+    def list_all(self) -> List[TaskRecord]:
+        with self._lock:
+            return list(self._data.values())
 
     def lock(self) -> threading.RLock:
         return self._lock

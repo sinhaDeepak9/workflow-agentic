@@ -1,7 +1,9 @@
 """Workflow REST endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import List, Optional
+
+from fastapi import APIRouter, Query
 
 from app.api import serializers
 from app.container import get_container
@@ -13,6 +15,58 @@ from app.models.api import (
 )
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
+
+
+@router.get(
+    "",
+    summary="List all workflow instances",
+    description=(
+        "Returns a paginated list of workflow instances with optional filters.\n\n"
+        "**Filters**\n"
+        "- `status` — one or more: `RUNNING`, `WAITING_ON_HUMAN_TASK`, `COMPLETED`, `FAILED`, `CANCELLED`\n"
+        "- `workflow_type` — case-insensitive exact match on workflow type name\n"
+        "- `current_node` — exact match on the node the workflow is currently at\n"
+        "- `definition_version` — pin to a specific definition version\n"
+        "- `owner` — substring match across `targetUser`, `reviewer`, `supervisor`, `reportOwners`\n"
+        "- `created_after` / `created_before` — Unix epoch float bounds on `created_at`\n\n"
+        "Results are sorted by `created_at` descending (newest first)."
+    ),
+)
+def list_workflows(
+    status: Optional[List[str]] = Query(
+        None,
+        description="Filter by one or more workflow statuses",
+        example=["RUNNING", "WAITING_ON_HUMAN_TASK"],
+    ),
+    workflow_type: Optional[str] = Query(None, description="Case-insensitive workflow type name"),
+    current_node: Optional[str] = Query(None, description="Node the workflow is currently paused at"),
+    definition_version: Optional[int] = Query(None, description="Workflow definition version"),
+    owner: Optional[str] = Query(
+        None, description="Substring match across targetUser, reviewer, supervisor, reportOwners"
+    ),
+    created_after: Optional[float] = Query(None, description="Unix epoch — return instances created after this time"),
+    created_before: Optional[float] = Query(None, description="Unix epoch — return instances created before this time"),
+    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    page_size: int = Query(20, ge=1, le=200, alias="pageSize", description="Items per page"),
+):
+    c = get_container()
+    result = c.workflow_service.list_workflows(
+        status=status,
+        workflow_type=workflow_type,
+        current_node=current_node,
+        definition_version=definition_version,
+        owner=owner,
+        created_after=created_after,
+        created_before=created_before,
+        page=page,
+        page_size=page_size,
+    )
+    return {
+        "total": result["total"],
+        "page": result["page"],
+        "pageSize": result["pageSize"],
+        "items": [serializers.workflow_summary(i) for i in result["items"]],
+    }
 
 
 @router.post("")

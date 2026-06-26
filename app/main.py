@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 
-from app.api import definitions, tasks, workflows
+from app.api import definitions, graph, task_list, tasks, workflow_graph, workflows
 from app.config.settings import get_settings
 from app.container import get_container
 from app.errors import WorkflowError
@@ -46,4 +46,7 @@ def health():
 
 app.include_router(workflows.router)
 app.include_router(tasks.router)
+app.include_router(task_list.router)
 app.include_router(definitions.router)
+app.include_router(graph.router)
+app.include_router(workflow_graph.router)

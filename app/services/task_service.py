@@ -17,6 +17,78 @@ class TaskService:
     def __init__(self, container: "Container") -> None:
         self._c = container
 
+    # -- listing / filtering ----------------------------------------------- #
+    def list_all_tasks(
+        self,
+        *,
+        workflow_id: Optional[str] = None,
+        status: Optional[List[str]] = None,
+        task_type: Optional[str] = None,
+        assignee: Optional[str] = None,
+        effective_assignee: Optional[str] = None,
+        candidate_group: Optional[str] = None,
+        due_before: Optional[str] = None,
+        due_after: Optional[str] = None,
+        created_after: Optional[float] = None,
+        created_before: Optional[float] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Dict[str, Any]:
+        """Return a paginated, filtered list of all task records across all workflows."""
+        items = self._c.task_store.list_all()
+
+        if workflow_id:
+            items = [t for t in items if t.workflow_id == workflow_id]
+
+        if status:
+            allowed = {s.upper() for s in status}
+            items = [t for t in items if t.status.value in allowed]
+
+        if task_type:
+            tt = task_type.lower()
+            items = [t for t in items if t.task_type.lower() == tt]
+
+        if assignee:
+            needle = assignee.lower()
+            items = [t for t in items if t.assignee and needle in t.assignee.lower()]
+
+        if effective_assignee:
+            needle = effective_assignee.lower()
+            items = [
+                t for t in items
+                if t.effective_assignee and needle in t.effective_assignee.lower()
+            ]
+
+        if candidate_group:
+            needle = candidate_group.lower()
+            items = [
+                t for t in items
+                if any(needle in g.lower() for g in t.candidate_groups)
+            ]
+
+        if due_before:
+            items = [t for t in items if t.due_date and t.due_date <= due_before]
+
+        if due_after:
+            items = [t for t in items if t.due_date and t.due_date >= due_after]
+
+        if created_after is not None:
+            items = [t for t in items if t.created_at >= created_after]
+
+        if created_before is not None:
+            items = [t for t in items if t.created_at <= created_before]
+
+        items.sort(key=lambda t: t.created_at, reverse=True)
+
+        total = len(items)
+        start = (page - 1) * page_size
+        return {
+            "total": total,
+            "page": page,
+            "pageSize": page_size,
+            "items": items[start: start + page_size],
+        }
+
     # -- reads ------------------------------------------------------------- #
     def list_tasks(self, workflow_id: str) -> List[TaskRecord]:
         self._c.instance_store.get(workflow_id)  # existence check

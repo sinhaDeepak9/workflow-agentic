@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from langgraph.types import Command
 
@@ -19,6 +19,68 @@ if TYPE_CHECKING:
 class WorkflowService:
     def __init__(self, container: "Container") -> None:
         self._c = container
+
+    # -- listing / filtering ----------------------------------------------- #
+    def list_workflows(
+        self,
+        *,
+        status: Optional[List[str]] = None,
+        workflow_type: Optional[str] = None,
+        current_node: Optional[str] = None,
+        definition_version: Optional[int] = None,
+        owner: Optional[str] = None,
+        created_after: Optional[float] = None,
+        created_before: Optional[float] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Dict[str, Any]:
+        """Return a paginated, filtered list of all workflow instances."""
+        items = self._c.instance_store.list_all()
+
+        if status:
+            allowed = {s.upper() for s in status}
+            items = [i for i in items if i.status.value in allowed]
+
+        if workflow_type:
+            wt = workflow_type.lower()
+            items = [i for i in items if i.workflow_type.lower() == wt]
+
+        if current_node:
+            items = [i for i in items if i.current_node == current_node]
+
+        if definition_version is not None:
+            items = [i for i in items if i.definition_version == definition_version]
+
+        if owner:
+            needle = owner.lower()
+            def _owner_match(inst: "WorkflowInstance") -> bool:  # type: ignore[name-defined]
+                v = inst.variables
+                scalars = [
+                    v.get(k) for k in ("targetUser", "reviewer", "supervisor", "mqdUser", "mcoUser")
+                ]
+                lists = v.get("reportOwners") or []
+                candidates = [str(s).lower() for s in scalars if s] + [
+                    str(u).lower() for u in lists
+                ]
+                return any(needle in c for c in candidates)
+            items = [i for i in items if _owner_match(i)]
+
+        if created_after is not None:
+            items = [i for i in items if i.created_at >= created_after]
+
+        if created_before is not None:
+            items = [i for i in items if i.created_at <= created_before]
+
+        items.sort(key=lambda i: i.created_at, reverse=True)
+
+        total = len(items)
+        start = (page - 1) * page_size
+        return {
+            "total": total,
+            "page": page,
+            "pageSize": page_size,
+            "items": items[start: start + page_size],
+        }
 
     def _config(self, workflow_id: str) -> dict:
         return {"configurable": {"thread_id": workflow_id}}
